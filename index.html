@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mein Bankbuch</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --bg:#0f1115;
+    --card:#171a21;
+    --card2:#1f232c;
+    --border:#2a2f3a;
+    --text:#eef1f5;
+    --muted:#8b93a3;
+    --accent:#3ddc84;
+    --danger:#ff5c6c;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:24px 12px 60px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+    width:100%;
+    max-width:480px;
+    margin-bottom:16px;
+  }
+  h1{font-size:1.4rem;margin:0 0 12px;}
+  h2{font-size:1rem;color:var(--muted);margin:22px 0 10px;text-transform:uppercase;letter-spacing:.04em;}
+  .hidden{display:none !important;}
+  .muted{color:var(--muted);font-size:.85rem;}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  select,input[type=text],input[type=password],input[type=number]{
+    width:100%;
+    background:var(--card2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:11px 12px;
+    border-radius:10px;
+    font-size:1rem;
+    margin-bottom:10px;
+  }
+  form{display:flex;flex-direction:column;}
+  button{
+    background:var(--accent);
+    color:#04140a;
+    border:none;
+    padding:12px 16px;
+    border-radius:10px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button.ghost{
+    background:transparent;
+    color:var(--text);
+    border:1px solid var(--border);
+    font-weight:500;
+  }
+  button.small{padding:8px 12px;font-size:.85rem;width:auto;}
+  hr{border:none;border-top:1px solid var(--border);margin:16px 0;}
+  .error{color:var(--danger);font-size:.85rem;}
+  .pos{color:var(--accent);}
+  .neg{color:var(--danger);}
+  .big{font-size:2.2rem;font-weight:700;margin:4px 0 0;}
+  .balance-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+  .balance-row:last-child{border-bottom:none;}
+  .tx-row{padding:10px 0;border-bottom:1px solid var(--border);}
+  .tx-row:last-child{border-bottom:none;}
+  .tx-row.send{border-left:3px solid var(--accent);padding-left:10px;}
+  .tx-row.take{border-left:3px solid var(--danger);padding-left:10px;}
+  .tx-row .del-tx{margin-top:6px;background:var(--danger);color:#fff;padding:6px 10px;font-size:.8rem;width:auto;}
+  table.items{width:100%;border-collapse:collapse;margin:6px 0;font-size:.85rem;}
+  table.items td{padding:3px 0;color:var(--muted);}
+  table.items td:last-child{text-align:right;color:var(--text);}
+  .receipt-row{
+    display:grid;
+    grid-template-columns:2fr 1fr 1fr auto auto;
+    gap:6px;
+    align-items:center;
+    margin-bottom:6px;
+  }
+  .receipt-row input{margin-bottom:0;}
+  .receipt-row .subtotal{font-size:.85rem;color:var(--muted);white-space:nowrap;}
+  .receipt-row .del-row{background:var(--danger);color:#fff;padding:8px;width:auto;}
+  #popup-overlay{
+    position:fixed;inset:0;
+    background:rgba(0,0,0,.6);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  .popup-box{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:24px;
+    max-width:380px;
+    width:100%;
+    text-align:center;
+  }
+  .popup-box button{width:100%;margin-top:14px;}
+</style>
+</head>
+<body>
+
+<div id="popup-overlay" class="hidden">
+  <div id="popup-content" class="popup-box"></div>
+</div>
+
+<div id="view-landing" class="view hidden">
+  <div class="card">
+    <h1>🏦 Mein Bankbuch</h1>
+    <label>Wer bist du?</label>
+    <select id="landing-person-select"></select>
+    <button id="landing-continue">Weiter</button>
+    <hr>
+    <button id="landing-admin-btn" class="ghost">Admin Login</button>
+  </div>
+</div>
+
+<div id="view-login" class="view hidden">
+  <div class="card">
+    <h1>🔒 Admin Login</h1>
+    <form id="login-form">
+      <input type="password" id="login-password" placeholder="Passwort" required>
+      <button type="submit">Einloggen</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+</div>
+
+<div id="view-admin" class="view hidden">
+  <div class="card">
+    <div class="row-between"><h1>🏦 Admin</h1><button id="admin-logout" class="ghost small">Logout</button></div>
+
+    <h2>Übersicht</h2>
+    <div id="admin-overview"></div>
+
+    <h2>Person</h2>
+    <div class="row-between">
+      <select id="admin-person-select"></select>
+      <button id="admin-add-person" class="ghost small">+ Neu</button>
+    </div>
+
+    <h2>Schnellaktion</h2>
+    <form id="admin-quick-form">
+      <select id="admin-type"><option value="send">Senden 💸 (er bekommt)</option><option value="take">Nehmen 🪙 (er verliert)</option></select>
+      <input type="number" id="admin-amount" step="0.01" min="0" placeholder="Betrag €" required>
+      <input type="text" id="admin-note" placeholder="Notiz (optional)">
+      <button type="submit">Ausführen</button>
+    </form>
+
+    <h2>🧮 Taschenrechner / Quittung</h2>
+    <div id="receipt-rows"></div>
+    <button type="button" id="receipt-add-row" class="ghost small">+ Position</button>
+    <div class="row-between" style="margin-top:10px;"><b>Summe:</b><span id="receipt-total">0,00 €</span></div>
+    <select id="receipt-type"><option value="send">als Senden 💸 (er bekommt)</option><option value="take">als Nehmen 🪙 (er verliert)</option></select>
+    <button type="button" id="receipt-send">Quittung senden</button>
+
+    <h2>Verlauf (alle)</h2>
+    <div id="admin-history"></div>
+  </div>
+</div>
+
+<div id="view-person" class="view hidden">
+  <div class="card">
+    <div class="row-between"><h1 id="person-name"></h1><button id="person-switch" class="ghost small">Wechseln</button></div>
+    <p class="muted">Aktueller Stand</p>
+    <p id="person-balance" class="big"></p>
+    <h2>Verlauf</h2>
+    <div id="person-history"></div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/* ========================================================
+   KONFIGURATION – HIER DEINE SUPABASE-DATEN + PASSWORT EINTRAGEN
+   (kann ruhig so auf GitHub liegen, ist ja nichts geheimes)
+   ======================================================== */
+const SUPABASE_URL = "https://DEIN-PROJEKT.supabase.co";
+const SUPABASE_ANON_KEY = "DEIN-ANON-KEY";
+const ADMIN_PASSWORD = "changeme";
+/* ======================================================== */
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+function show(id){ $$('.view').forEach(v=>v.classList.add('hidden')); $(id).classList.remove('hidden'); }
+function fmt(n){ return Number(n||0).toFixed(2).replace('.',',') + ' €'; }
+function fmtDate(d){ return new Date(d).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function renderItemsTable(items){
+  return `<table class="items"><tbody>${items.map(i=>`<tr><td>${i.qty}x ${i.name}</td><td>${fmt(i.qty*i.price)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+let receiptRows = [];
+
+/* ---------------- ROUTER ---------------- */
+async function route(){
+  const params = new URLSearchParams(location.search);
+  if(params.has('admin')){
+    if(sessionStorage.getItem('bankapp_admin')==='1') return openAdmin();
+    return show('#view-login');
+  }
+  const pid = params.get('person') || localStorage.getItem('bankapp_person');
+  if(pid) return openPerson(pid);
+  openLanding();
+}
+
+/* ---------------- LANDING ---------------- */
+async function openLanding(){
+  show('#view-landing');
+  const { data: persons } = await supabase.from('persons').select('*').order('name');
+  $('#landing-person-select').innerHTML = '<option value="">– Person wählen –</option>' +
+    (persons||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+$('#landing-continue').addEventListener('click', ()=>{
+  const id = $('#landing-person-select').value;
+  if(!id) return alert('Bitte Person wählen');
+  localStorage.setItem('bankapp_person', id);
+  openPerson(id);
+});
+$('#landing-admin-btn').addEventListener('click', ()=>{
+  history.replaceState(null,'','?admin=1');
+  route();
+});
+
+/* ---------------- LOGIN ---------------- */
+$('#login-form').addEventListener('submit', e=>{
+  e.preventDefault();
+  if($('#login-password').value === ADMIN_PASSWORD){
+    sessionStorage.setItem('bankapp_admin','1');
+    openAdmin();
+  } else {
+    $('#login-error').textContent = 'Falsches Passwort';
+  }
+});
+
+/* ---------------- ADMIN ---------------- */
+let allPersons = [], allTx = [], selectedPersonId = null;
+
+async function openAdmin(){
+  show('#view-admin');
+  await refreshAdminData();
+}
+async function refreshAdminData(){
+  const [{data: persons}, {data: tx}] = await Promise.all([
+    supabase.from('persons').select('*').order('name'),
+    supabase.from('transactions').select('*').order('created_at', {ascending:false})
+  ]);
+  allPersons = persons || [];
+  allTx = tx || [];
+  renderAdminOverview();
+  renderAdminPersonSelect();
+  renderAdminHistory();
+}
+function balanceFor(personId){
+  return allTx.filter(t=>t.person_id===personId).reduce((s,t)=> s + (t.type==='send'? Number(t.amount) : -Number(t.amount)), 0);
+}
+function renderAdminOverview(){
+  $('#admin-overview').innerHTML = allPersons.map(p=>{
+    const bal = balanceFor(p.id);
+    return `<div class="balance-row"><span>${p.name}</span><span class="${bal>=0?'pos':'neg'}">${fmt(bal)}</span></div>`;
+  }).join('') || '<p class="muted">Noch keine Personen.</p>';
+}
+function renderAdminPersonSelect(){
+  const sel = $('#admin-person-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">– Person wählen –</option>' + allPersons.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(prev) sel.value = prev;
+  selectedPersonId = sel.value || null;
+}
+$('#admin-person-select').addEventListener('change', e=>{ selectedPersonId = e.target.value || null; });
+$('#admin-add-person').addEventListener('click', async ()=>{
+  const name = prompt('Name der neuen Person:');
+  if(!name) return;
+  const { error } = await supabase.from('persons').insert({ name: name.trim() });
+  if(error) return alert('Fehler: '+error.message);
+  refreshAdminData();
+});
+$('#admin-quick-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  if(!selectedPersonId) return alert('Bitte zuerst eine Person wählen');
+  const amount = parseFloat($('#admin-amount').value);
+  const note = $('#admin-note').value.trim();
+  const type = $('#admin-type').value;
+  if(!amount || amount<=0) return alert('Bitte gültigen Betrag eingeben');
+  const { error } = await supabase.from('transactions').insert({ person_id: selectedPersonId, type, amount, note, seen:false });
+  if(error) return alert('Fehler: '+error.message);
+  $('#admin-quick-form').reset();
+  refreshAdminData();
+});
+
+/* Taschenrechner / Quittung */
+function renderReceiptRows(){
+  const el = $('#receipt-rows');
+  el.innerHTML = receiptRows.map((r,i)=>`
+    <div class="receipt-row">
+      <input type="text" placeholder="Name der Sache" value="${r.name}" data-i="${i}" data-f="name">
+      <input type="number" min="0" step="1" placeholder="Anzahl" value="${r.qty}" data-i="${i}" data-f="qty">
+      <input type="number" min="0" step="0.01" placeholder="Preis/Stk" value="${r.price}" data-i="${i}" data-f="price">
+      <span class="subtotal">${fmt(r.qty*r.price)}</span>
+      <button type="button" class="del-row" data-i="${i}">✕</button>
+    </div>`).join('');
+  const total = receiptRows.reduce((s,r)=> s + r.qty*r.price, 0);
+  $('#receipt-total').textContent = fmt(total);
+}
+$('#receipt-add-row').addEventListener('click', ()=>{ receiptRows.push({name:'',qty:1,price:0}); renderReceiptRows(); });
+$('#receipt-rows').addEventListener('input', e=>{
+  const i = e.target.dataset.i, f = e.target.dataset.f;
+  if(i===undefined) return;
+  receiptRows[i][f] = f==='name'? e.target.value : (parseFloat(e.target.value)||0);
+  renderReceiptRows();
+});
+$('#receipt-rows').addEventListener('click', e=>{
+  if(e.target.classList.contains('del-row')){ receiptRows.splice(e.target.dataset.i,1); renderReceiptRows(); }
+});
+$('#receipt-send').addEventListener('click', async ()=>{
+  if(!selectedPersonId) return alert('Bitte zuerst eine Person wählen');
+  if(!receiptRows.length) return alert('Keine Positionen eingetragen');
+  const total = receiptRows.reduce((s,r)=> s + r.qty*r.price, 0);
+  const type = $('#receipt-type').value;
+  const { error } = await supabase.from('transactions').insert({
+    person_id: selectedPersonId, type, amount: total, note: 'Quittung', items: receiptRows, seen:false
+  });
+  if(error) return alert('Fehler: '+error.message);
+  receiptRows = []; renderReceiptRows();
+  await refreshAdminData();
+  alert('Quittung gesendet!');
+});
+renderReceiptRows();
+
+function renderAdminHistory(){
+  $('#admin-history').innerHTML = allTx.map(t=>{
+    const p = allPersons.find(p=>p.id===t.person_id);
+    return `<div class="tx-row ${t.type}">
+      <div><b>${p?p.name:'?'}</b> – ${t.type==='send'?'gesendet':'genommen'} – ${fmt(t.amount)}</div>
+      <div class="muted">${fmtDate(t.created_at)} ${t.note?'– '+t.note:''}</div>
+      ${t.items? renderItemsTable(t.items):''}
+      <button class="del-tx" data-id="${t.id}">Löschen</button>
+    </div>`;
+  }).join('') || '<p class="muted">Noch keine Transaktionen.</p>';
+}
+$('#admin-history').addEventListener('click', async e=>{
+  if(e.target.classList.contains('del-tx')){
+    if(!confirm('Wirklich löschen?')) return;
+    await supabase.from('transactions').delete().eq('id', e.target.dataset.id);
+    refreshAdminData();
+  }
+});
+$('#admin-logout').addEventListener('click', ()=>{
+  sessionStorage.removeItem('bankapp_admin');
+  history.replaceState(null,'','?');
+  route();
+});
+
+/* ---------------- PERSON VIEW ---------------- */
+let currentPerson = null, personChannel = null;
+
+async function openPerson(id){
+  show('#view-person');
+  const { data: person } = await supabase.from('persons').select('*').eq('id', id).single();
+  if(!person){ localStorage.removeItem('bankapp_person'); return openLanding(); }
+  currentPerson = person;
+  $('#person-name').textContent = person.name;
+  await refreshPersonData();
+  await showPendingPopups();
+  subscribeRealtime();
+}
+async function refreshPersonData(){
+  const { data: tx } = await supabase.from('transactions').select('*').eq('person_id', currentPerson.id).order('created_at',{ascending:false});
+  const list = tx || [];
+  const balance = list.reduce((s,t)=> s + (t.type==='send'? Number(t.amount) : -Number(t.amount)), 0);
+  $('#person-balance').textContent = fmt(balance);
+  $('#person-balance').className = balance>=0? 'pos big':'neg big';
+  $('#person-history').innerHTML = list.map(t=>`
+    <div class="tx-row ${t.type}">
+      <div>${t.type==='send'?'💸 Erhalten':'🪙 Abgebucht'} – <b>${fmt(t.amount)}</b></div>
+      <div class="muted">${fmtDate(t.created_at)} ${t.note?'– '+t.note:''}</div>
+      ${t.items? renderItemsTable(t.items):''}
+    </div>`).join('') || '<p class="muted">Noch keine Transaktionen.</p>';
+}
+async function showPendingPopups(){
+  const { data: pending } = await supabase.from('transactions').select('*').eq('person_id', currentPerson.id).eq('seen', false).order('created_at');
+  for(const tx of (pending||[])){
+    await new Promise(resolve=>{
+      openPopup(tx, async ()=>{
+        await supabase.from('transactions').update({seen:true}).eq('id', tx.id);
+        resolve();
+      });
+    });
+  }
+}
+function subscribeRealtime(){
+  if(personChannel) supabase.removeChannel(personChannel);
+  personChannel = supabase.channel('tx-'+currentPerson.id)
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'transactions', filter:`person_id=eq.${currentPerson.id}`}, payload=>{
+      openPopup(payload.new, async ()=>{
+        await supabase.from('transactions').update({seen:true}).eq('id', payload.new.id);
+        refreshPersonData();
+      });
+    })
+    .subscribe();
+}
+function openPopup(tx, onClose){
+  const overlay = $('#popup-overlay');
+  $('#popup-content').innerHTML = `
+    <h3>${tx.type==='send'? '💸 Geld erhalten':'🪙 Geld abgebucht'}</h3>
+    <p class="big ${tx.type==='send'?'pos':'neg'}">${fmt(tx.amount)}</p>
+    ${tx.note? `<p>${tx.note}</p>`:''}
+    ${tx.items? renderItemsTable(tx.items):''}
+    <p class="muted">${fmtDate(tx.created_at)}</p>
+    <button id="popup-ok">OK</button>`;
+  overlay.classList.remove('hidden');
+  $('#popup-ok').onclick = ()=>{ overlay.classList.add('hidden'); onClose(); refreshPersonData(); };
+}
+$('#person-switch').addEventListener('click', ()=>{
+  localStorage.removeItem('bankapp_person');
+  if(personChannel) supabase.removeChannel(personChannel);
+  history.replaceState(null,'','?');
+  route();
+});
+
+/* ---------------- SERVICE WORKER ---------------- */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+route();
+</script>
+</body>
+</html>
