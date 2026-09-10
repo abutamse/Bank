@@ -410,7 +410,12 @@ $('#receipt-rows').addEventListener('input', e=>{
   const i = e.target.dataset.i, f = e.target.dataset.f;
   if(i===undefined) return;
   receiptRows[i][f] = f==='name'? e.target.value : (parseFloat(e.target.value)||0);
-  renderReceiptRows();
+  // Nur den Zwischensumme-Text aktualisieren, NICHT die Eingabefelder neu bauen
+  // (sonst verliert das Feld den Fokus und die Tastatur klappt bei jedem Zeichen zu)
+  const row = e.target.closest('.receipt-row');
+  if(row){ row.querySelector('.subtotal').textContent = fmt(receiptRows[i].qty * receiptRows[i].price); }
+  const total = receiptRows.reduce((s,r)=> s + r.qty*r.price, 0);
+  $('#receipt-total').textContent = fmt(total);
 });
 $('#receipt-rows').addEventListener('click', e=>{
   if(e.target.classList.contains('del-row')){ receiptRows.splice(e.target.dataset.i,1); renderReceiptRows(); }
