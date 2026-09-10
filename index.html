@@ -122,23 +122,13 @@
   <div id="popup-content" class="popup-box"></div>
 </div>
 
-<div id="view-landing" class="view hidden">
-  <div class="card">
-    <h1>🏦 Mein Bankbuch</h1>
-    <label>Wer bist du?</label>
-    <select id="landing-person-select"></select>
-    <button id="landing-continue">Weiter</button>
-    <hr>
-    <button id="landing-admin-btn" class="ghost">Admin Login</button>
-  </div>
-</div>
-
 <div id="view-login" class="view hidden">
   <div class="card">
-    <h1>🔒 Admin Login</h1>
+    <h1>تسجيل دخول</h1>
     <form id="login-form">
-      <input type="password" id="login-password" placeholder="Passwort" required>
-      <button type="submit">Einloggen</button>
+      <input type="text" id="login-username" placeholder="اسم المستخدم" required autocomplete="username">
+      <input type="password" id="login-password" placeholder="كلمة السر" required autocomplete="current-password">
+      <button type="submit">تسجيل</button>
       <p id="login-error" class="error"></p>
     </form>
   </div>
@@ -146,7 +136,7 @@
 
 <div id="view-admin" class="view hidden">
   <div class="card">
-    <div class="row-between"><h1>🏦 Admin</h1><button id="admin-logout" class="ghost small">Logout</button></div>
+    <div class="row-between"><h1>🏦 Admin</h1><button id="admin-logout" class="ghost small">Abmelden</button></div>
 
     <h2>Übersicht</h2>
     <div id="admin-overview"></div>
@@ -179,7 +169,7 @@
 
 <div id="view-person" class="view hidden">
   <div class="card">
-    <div class="row-between"><h1 id="person-name"></h1><button id="person-switch" class="ghost small">Wechseln</button></div>
+    <div class="row-between"><h1 id="person-name"></h1><button id="person-switch" class="ghost small">Abmelden</button></div>
     <p class="muted">Aktueller Stand</p>
     <p id="person-balance" class="big"></p>
     <h2>Verlauf</h2>
@@ -191,12 +181,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /* ========================================================
-   KONFIGURATION – HIER DEINE SUPABASE-DATEN + PASSWORT EINTRAGEN
-   (kann ruhig so auf GitHub liegen, ist ja nichts geheimes)
+   KONFIGURATION – kann so auf GitHub liegen, ist ja nichts geheimes
    ======================================================== */
 const SUPABASE_URL = "https://beekurnprkvehylgztaa.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJlZWt1cm5wcmt2ZWh5bGd6dGFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5OTYxNTgsImV4cCI6MjEwNDU3MjE1OH0.2HrHDtst8K2ZCJVqvLdpnSjoGiV6j9mw7jlofD9Yif8";
-const ADMIN_PASSWORD = "4457018";
+const ADMIN_USERNAME = "abody";
+const ADMIN_PASSWORD = "abody4457018"; // <-- HIER DEIN EIGENES PASSWORT EINTRAGEN
 /* ======================================================== */
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -209,48 +199,41 @@ function fmtDate(d){ return new Date(d).toLocaleString('de-DE',{day:'2-digit',mo
 function renderItemsTable(items){
   return `<table class="items"><tbody>${items.map(i=>`<tr><td>${i.qty}x ${i.name}</td><td>${fmt(i.qty*i.price)}</td></tr>`).join('')}</tbody></table>`;
 }
+function getSession(){ try{ return JSON.parse(localStorage.getItem('bankapp_session')||'null'); }catch{ return null; } }
+function setSession(obj){ localStorage.setItem('bankapp_session', JSON.stringify(obj)); }
+function clearSession(){ localStorage.removeItem('bankapp_session'); }
 
 let receiptRows = [];
 
 /* ---------------- ROUTER ---------------- */
 async function route(){
-  const params = new URLSearchParams(location.search);
-  if(params.has('admin')){
-    if(sessionStorage.getItem('bankapp_admin')==='1') return openAdmin();
-    return show('#view-login');
-  }
-  const pid = params.get('person') || localStorage.getItem('bankapp_person');
-  if(pid) return openPerson(pid);
-  openLanding();
+  const session = getSession();
+  if(session && session.type==='admin') return openAdmin();
+  if(session && session.type==='person') return openPerson(session.id);
+  show('#view-login');
 }
-
-/* ---------------- LANDING ---------------- */
-async function openLanding(){
-  show('#view-landing');
-  const { data: persons } = await supabase.from('persons').select('*').order('name');
-  $('#landing-person-select').innerHTML = '<option value="">– Person wählen –</option>' +
-    (persons||[]).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-}
-$('#landing-continue').addEventListener('click', ()=>{
-  const id = $('#landing-person-select').value;
-  if(!id) return alert('Bitte Person wählen');
-  localStorage.setItem('bankapp_person', id);
-  openPerson(id);
-});
-$('#landing-admin-btn').addEventListener('click', ()=>{
-  history.replaceState(null,'','?admin=1');
-  route();
-});
 
 /* ---------------- LOGIN ---------------- */
-$('#login-form').addEventListener('submit', e=>{
+$('#login-form').addEventListener('submit', async e=>{
   e.preventDefault();
-  if($('#login-password').value === ADMIN_PASSWORD){
-    sessionStorage.setItem('bankapp_admin','1');
-    openAdmin();
-  } else {
-    $('#login-error').textContent = 'Falsches Passwort';
+  $('#login-error').textContent = '';
+  const username = $('#login-username').value.trim();
+  const password = $('#login-password').value;
+
+  if(username.toLowerCase() === ADMIN_USERNAME.toLowerCase() && password === ADMIN_PASSWORD){
+    setSession({type:'admin'});
+    $('#login-form').reset();
+    return openAdmin();
   }
+
+  // Normale Personen: nur der Name muss passen (kein echtes Passwort nötig)
+  const { data: person } = await supabase.from('persons').select('*').ilike('name', username).maybeSingle();
+  if(person){
+    setSession({type:'person', id: person.id});
+    $('#login-form').reset();
+    return openPerson(person.id);
+  }
+  $('#login-error').textContent = 'Benutzername oder Passwort falsch';
 });
 
 /* ---------------- ADMIN ---------------- */
@@ -289,7 +272,7 @@ function renderAdminPersonSelect(){
 }
 $('#admin-person-select').addEventListener('change', e=>{ selectedPersonId = e.target.value || null; });
 $('#admin-add-person').addEventListener('click', async ()=>{
-  const name = prompt('Name der neuen Person:');
+  const name = prompt('Name der neuen Person (das ist auch ihr Login-Benutzername):');
   if(!name) return;
   const { error } = await supabase.from('persons').insert({ name: name.trim() });
   if(error) return alert('Fehler: '+error.message);
@@ -366,9 +349,8 @@ $('#admin-history').addEventListener('click', async e=>{
   }
 });
 $('#admin-logout').addEventListener('click', ()=>{
-  sessionStorage.removeItem('bankapp_admin');
-  history.replaceState(null,'','?');
-  route();
+  clearSession();
+  show('#view-login');
 });
 
 /* ---------------- PERSON VIEW ---------------- */
@@ -377,7 +359,7 @@ let currentPerson = null, personChannel = null;
 async function openPerson(id){
   show('#view-person');
   const { data: person } = await supabase.from('persons').select('*').eq('id', id).single();
-  if(!person){ localStorage.removeItem('bankapp_person'); return openLanding(); }
+  if(!person){ clearSession(); return show('#view-login'); }
   currentPerson = person;
   $('#person-name').textContent = person.name;
   await refreshPersonData();
@@ -392,7 +374,7 @@ async function refreshPersonData(){
   $('#person-balance').className = balance>=0? 'pos big':'neg big';
   $('#person-history').innerHTML = list.map(t=>`
     <div class="tx-row ${t.type}">
-      <div>${t.type==='send'?'💸 Erhalten':'🪙 Abgebucht'} – <b>${fmt(t.amount)}</b></div>
+      <div>${t.type==='send'?'💸 تم استلام':'تم سحب'} – <b>${fmt(t.amount)}</b></div>
       <div class="muted">${fmtDate(t.created_at)} ${t.note?'– '+t.note:''}</div>
       ${t.items? renderItemsTable(t.items):''}
     </div>`).join('') || '<p class="muted">Noch keine Transaktionen.</p>';
@@ -422,7 +404,7 @@ function subscribeRealtime(){
 function openPopup(tx, onClose){
   const overlay = $('#popup-overlay');
   $('#popup-content').innerHTML = `
-    <h3>${tx.type==='send'? '💸 Geld erhalten':'🪙 Geld abgebucht'}</h3>
+    <h3>${tx.type==='send'? 'تم استلام':'تم سحب'}</h3>
     <p class="big ${tx.type==='send'?'pos':'neg'}">${fmt(tx.amount)}</p>
     ${tx.note? `<p>${tx.note}</p>`:''}
     ${tx.items? renderItemsTable(tx.items):''}
@@ -432,10 +414,9 @@ function openPopup(tx, onClose){
   $('#popup-ok').onclick = ()=>{ overlay.classList.add('hidden'); onClose(); refreshPersonData(); };
 }
 $('#person-switch').addEventListener('click', ()=>{
-  localStorage.removeItem('bankapp_person');
+  clearSession();
   if(personChannel) supabase.removeChannel(personChannel);
-  history.replaceState(null,'','?');
-  route();
+  show('#view-login');
 });
 
 /* ---------------- SERVICE WORKER ---------------- */
