@@ -1,7 +1,5 @@
-const CACHE_NAME = "bankbuch-v1";
+const CACHE_NAME = "bankbuch-v2";
 const ASSETS = [
-  "./",
-  "./index.html",
   "./manifest.json",
   "./icon.svg"
 ];
@@ -22,13 +20,32 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Nur eigene Dateien cachen (App-Shell). Alles andere (z.B. Supabase-API)
-// geht immer direkt ins Netz, damit Daten immer aktuell sind.
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  if (url.origin === location.origin) {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return; // Supabase & Co: immer normal ins Netz
+
+  // Die App-Seite selbst (index.html / Navigation) IMMER frisch vom Server holen,
+  // damit Updates sofort ankommen. Nur offline greift der Cache als Notlösung.
+  const isPage = req.mode === "navigate" || url.pathname.endsWith("index.html") || url.pathname.endsWith("/");
+  if (isPage) {
     event.respondWith(
-      caches.match(event.request).then((cached) => cached || fetch(event.request))
+      fetch(req).then((res) => {
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+        return res;
+      }).catch(() => caches.match(req))
     );
+    return;
   }
+
+  // Andere eigene Dateien (Icon, Manifest): cache-first, im Hintergrund aktualisieren
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const fetchPromise = fetch(req).then((res) => {
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+        return res;
+      });
+      return cached || fetchPromise;
+    })
+  );
 });
