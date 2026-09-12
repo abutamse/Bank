@@ -1,4 +1,4 @@
-const CACHE_NAME = "bankbuch-v2";
+const CACHE_NAME = "marbank";
 const ASSETS = [
   "./manifest.json",
   "./icon.svg"
